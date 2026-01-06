@@ -48,12 +48,25 @@ type Manager struct {
 
 // NewManager creates a new polecat manager.
 func NewManager(r *rig.Rig, g *git.Git) *Manager {
-	// Always use mayor/rig as the beads path.
-	// This matches routes.jsonl which maps prefixes to <rig>/mayor/rig.
-	// The rig root .beads/ only contains config.yaml (no database),
-	// so running bd from there causes it to walk up and find town beads
-	// with the wrong prefix (e.g., 'gm' instead of the rig's prefix).
-	beadsPath := filepath.Join(r.Path, "mayor", "rig")
+	// Determine the shared beads location using the same logic as setupSharedBeads:
+	// - If mayor/rig/.beads exists (source repo has beads tracked in git), use that
+	// - Otherwise fall back to rig/.beads (created by initBeads during gt rig add)
+	mayorRigBeads := filepath.Join(r.Path, "mayor", "rig", ".beads")
+	rigRootBeads := filepath.Join(r.Path, ".beads")
+
+	var beadsPath string
+	if _, err := os.Stat(mayorRigBeads); err == nil {
+		// Source repo has .beads/ tracked - use mayor/rig/.beads
+		beadsPath = mayorRigBeads
+	} else {
+		// No beads in source repo - use rig root .beads (from initBeads)
+		beadsPath = rigRootBeads
+		// Ensure rig root has .beads/ directory
+		if err := os.MkdirAll(rigRootBeads, 0755); err != nil {
+			// Non-fatal: log warning but continue
+			fmt.Printf("Warning: could not create rig .beads dir: %v\n", err)
+		}
+	}
 
 	// Try to load rig settings for namepool config
 	settingsPath := filepath.Join(r.Path, "settings", "config.json")
